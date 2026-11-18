@@ -1,6 +1,6 @@
 /* Notes-Werkstatt (Handy-App): Substack Notes planen, schreiben, posten, auswerten. Abgleich über die Drive-Brücke. */
 'use strict';
-const VER = 'v2';
+const VER = 'v3';
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const uid = () => [...crypto.getRandomValues(new Uint8Array(8))].map(b => b.toString(16).padStart(2, '0')).join('');
@@ -388,6 +388,17 @@ function mergeMaster(m) {
   if (m.einst && (m.stand || 0) > (D.stand || 0)) { D.einst = Object.assign(D.einst, m.einst); ch = true; }
   return ch;
 }
+/* Texte vom Nachtdienst (MacBook) in leere Gedanken eintragen; eigener Text wird nie überschrieben */
+function fuelleTexte(T) {
+  let ch = false;
+  for (const g of D.gedanken) {
+    if (!g.audio || (g.transkript || '').trim()) continue;
+    const t = T[g.audio.id]; if (!t || !String(t.text || '').trim()) continue;
+    g.transkript = String(t.text).trim(); g.geaendert = Date.now(); ch = true;
+  }
+  if (ch) { QUIET = true; save(); QUIET = false; }
+  return ch;
+}
 async function drvSync(manuell) {
   if (!DRV.url || DRV.busy || (document.hidden && !manuell)) return;
   if (REC.on) return;
@@ -397,6 +408,7 @@ async function drvSync(manuell) {
     DRV.st = 'Abgleich läuft …'; drvShow();
     const m = await drvGetF('notes-daten.json');
     if (m && Array.isArray(m.notes)) { QUIET = true; neu = mergeMaster(m); if (neu) save(); QUIET = false; }
+    try { const T = await drvGetF('transkripte-daten.json'); if (T && fuelleTexte(T)) { neu = true; } } catch (e) { }
     const P = lsGet('nw_pf', {});
     for (const g of D.gedanken) { if (g.audio) { const k = g.audio.name + ':' + g.audio.size; if (!P[k]) { const b = await bGet(g.audio.id).catch(() => null); if (b) { DRV.st = 'Aufnahme wird übertragen …'; drvShow(); await drvPost({ name: g.audio.name, b64: await toB64(b) }); P[k] = 1; lsSet('nw_pf', P); } } } }
     const H = lsGet('nw_pushed', {});
